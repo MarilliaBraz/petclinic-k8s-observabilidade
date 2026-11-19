@@ -1,0 +1,23 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Expoe a aplicacao fora do cluster (NodePort). O Service distribui as
+# requisicoes entre as 2 replicas do PetClinic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-service
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: petclinic
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: petclinic
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: petclinic
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30080

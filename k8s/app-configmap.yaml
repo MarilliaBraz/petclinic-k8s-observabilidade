@@ -1,0 +1,53 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Configuracao da aplicacao (pilar "Parametrizacao"): conexao com o banco,
+# envio de telemetria e formato de log ficam aqui, fora da imagem. Mudar um
+# valor exige so "kubectl apply" e reinicio dos pods, sem novo build.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: petclinic
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: petclinic
+data:
+  AMBIENTE: minikube
+
+  # Banco de dados (o PetClinic ativa o PostgreSQL pelo profile "postgres")
+  SPRING_PROFILES_ACTIVE: postgres
+  DB_HOST: banco-service
+  DB_PORT: "5432"
+  DB_NAME: petclinic
+  DB_USER: petclinic
+
+  # Por padrao o PetClinic expoe todos os endpoints do Actuator (inclusive
+  # /env e /heapdump). Aqui ficam so os usados pelas probes do Kubernetes.
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+
+  # JVM: o heap acompanha o limite de memoria do container
+  JDK_JAVA_OPTIONS: "-XX:MaxRAMPercentage=70"
+
+  # OpenTelemetry: agente Java sem alterar o codigo (instrumentacao automatica).
+  # Traces e metricas vao por OTLP para o Collector. Logs NAO vao por OTLP:
+  # a aplicacao escreve no stdout (como manda o 12-factor) e o Collector
+  # le os arquivos de log dos pods.
+  JAVA_TOOL_OPTIONS: "-javaagent:/otel/javaagent.jar"
+  OTEL_SERVICE_NAME: petclinic
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observabilidade.svc:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_LOGS_EXPORTER: none
+  OTEL_METRIC_EXPORT_INTERVAL: "15000"
+
+  # Cada linha de log leva o trace_id da requisicao. E isso que permite ir do
+  # log (Loki) para o trace (Tempo) e do trace para os logs no Grafana.
+  LOGGING_PATTERN_CONSOLE: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%t] trace_id=%X{trace_id} span_id=%X{span_id} %logger{40} : %m%n"
+  # Registra cada requisicao recebida (metodo, URL e status). Vai em JSON
+  # porque variavel LOGGING_LEVEL_* vira minuscula, e o nome do logger
+  # DispatcherServlet diferencia maiusculas.
+  SPRING_APPLICATION_JSON: '{"logging.level.org.springframework.web.servlet.DispatcherServlet":"DEBUG"}'

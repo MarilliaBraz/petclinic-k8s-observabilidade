@@ -1,0 +1,123 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Aplicacao web Spring PetClinic com 2 replicas conectadas ao banco.
+#
+# O agente Java do OpenTelemetry e copiado para o pod por um initContainer
+# (mesma tecnica usada pelo OpenTelemetry Operator). A imagem da aplicacao
+# continua sem nenhuma dependencia de observabilidade.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: petclinic
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: petclinic
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: petclinic
+    app.kubernetes.io/version: 4.0.0-500158f
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: petclinic
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: petclinic
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: petclinic
+        app.kubernetes.io/version: 4.0.0-500158f
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: otel-agent
+          image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.33.1
+          imagePullPolicy: IfNotPresent
+          command: ["cp", "/javaagent.jar", "/otel/javaagent.jar"]
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          securityContext: &restrito
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel
+      containers:
+        - name: petclinic
+          image: petclinic:4.0.0-500158f
+          imagePullPolicy: IfNotPresent
+          securityContext: *restrito
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            # Conexao com o banco (DB_HOST=banco-service vem do ConfigMap)
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: DB_HOST }
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: DB_PORT }
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: DB_NAME }
+            - name: POSTGRES_URL
+              value: jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: DB_USER }
+            - name: POSTGRES_PASS
+              valueFrom:
+                secretKeyRef: { name: banco-credenciais, key: BANCO_APP_SENHA }
+            # Identifica cada replica na telemetria (metricas e traces por pod)
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef: { fieldPath: metadata.namespace }
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=petclinic,service.instance.id=$(POD_NAME),k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(POD_NAMESPACE),deployment.environment.name=$(AMBIENTE)
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel
+              readOnly: true
+      volumes:
+        - name: otel-agent
+          emptyDir: {}
