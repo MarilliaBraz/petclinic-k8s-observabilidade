@@ -1,0 +1,103 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Teste de carga com k6 rodando dentro do cluster. Gera trafego pelo
+# app-service para demonstrar o balanceamento entre as replicas e encher os
+# paineis de metricas, logs e traces. Executar com scripts/gerar-carga.sh
+# (o script troca __USUARIOS__ e __DURACAO__).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: carga-k6
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: carga-k6
+    app.kubernetes.io/part-of: petclinic
+data:
+  carga.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    const BASE = __ENV.BASE_URL;
+    const SOBRENOMES = ['Silva', 'Souza', 'Oliveira', 'Santos', 'Pereira', 'Costa'];
+
+    export const options = {
+      vus: Number(__ENV.USUARIOS),
+      duration: __ENV.DURACAO,
+      thresholds: { checks: ['rate>0.95'] },
+      // O Service do Kubernetes distribui CONEXOES, nao requisicoes. Com
+      // keep-alive, cada usuario virtual ficaria preso a uma replica.
+      // Abrindo uma conexao por requisicao, a divisao fica visivel no painel.
+      noConnectionReuse: true,
+    };
+
+    function telefone() {
+      return '62' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+    }
+
+    export default function () {
+      check(http.get(`${BASE}/`), { 'pagina inicial 200': (r) => r.status === 200 });
+      check(http.get(`${BASE}/vets.html`), { 'veterinarios 200': (r) => r.status === 200 });
+      check(http.get(`${BASE}/owners?lastName=`), { 'busca de donos 200': (r) => r.status === 200 });
+
+      const id = 1 + Math.floor(Math.random() * 10);
+      check(http.get(`${BASE}/owners/${id}`), { 'detalhe do dono 200': (r) => r.status === 200 });
+
+      // Escrita no banco: 1 cadastro a cada 4 iteracoes
+      if (__ITER % 4 === 0) {
+        const cadastro = http.post(`${BASE}/owners/new`, {
+          firstName: 'Carga',
+          lastName: SOBRENOMES[Math.floor(Math.random() * SOBRENOMES.length)],
+          address: 'Rua Teste, 100',
+          city: 'Goiania',
+          telephone: telefone(),
+        });
+        check(cadastro, { 'cadastro de dono 200': (r) => r.status === 200 });
+      }
+
+      // Erro proposital do PetClinic, para aparecer trace com erro no Tempo
+      if (__ITER % 20 === 0) {
+        http.get(`${BASE}/oups`, { responseCallback: http.expectedStatuses(500) });
+      }
+
+      sleep(1);
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: carga-k6
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: carga-k6
+    app.kubernetes.io/part-of: petclinic
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: carga-k6
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:2.4.0
+          args: ["run", "--quiet", "/scripts/carga.js"]
+          env:
+            - name: BASE_URL
+              value: http://app-service.petclinic.svc
+            - name: USUARIOS
+              value: "__USUARIOS__"
+            - name: DURACAO
+              value: "__DURACAO__"
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: carga-k6
