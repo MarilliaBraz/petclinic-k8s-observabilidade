@@ -1,0 +1,40 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Parametros do PostgreSQL (pilar "Parametrizacao"). As senhas NAO ficam
+# aqui: elas vem do Secret banco-credenciais, criado por scripts/subir.sh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: banco-config
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: banco
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: petclinic
+data:
+  APP_DB_NAME: petclinic
+  APP_DB_USER: petclinic
+  MONITOR_DB_USER: monitoramento
+  # "mod" registra no log todo INSERT, UPDATE e DELETE: cada cadastro feito
+  # no PetClinic aparece no Loki como log do banco.
+  PG_LOG_STATEMENT: mod
+  # Consultas acima deste tempo (ms) tambem vao para o log.
+  PG_LOG_MIN_DURATION_MS: "250"
+
+  # Executado uma unica vez, na criacao do volume. Separa as contas:
+  #  - administrador: so cria banco e usuarios;
+  #  - petclinic: dona do banco da aplicacao, sem superusuario;
+  #  - monitoramento: so le estatisticas (papel pg_monitor).
+  01-criar-usuarios.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
+      --set=app_user="$APP_DB_USER" --set=app_pass="$APP_DB_PASSWORD" \
+      --set=app_db="$APP_DB_NAME" \
+      --set=mon_user="$MONITOR_DB_USER" --set=mon_pass="$MONITOR_DB_PASSWORD" <<'SQL'
+    CREATE ROLE :"app_user" LOGIN PASSWORD :'app_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    CREATE DATABASE :"app_db" OWNER :"app_user";
+    CREATE ROLE :"mon_user" LOGIN PASSWORD :'mon_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    GRANT pg_monitor TO :"mon_user";
+    SQL

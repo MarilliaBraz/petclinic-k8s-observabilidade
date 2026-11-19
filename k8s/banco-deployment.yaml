@@ -1,0 +1,116 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Banco de dados PostgreSQL. Foi usado StatefulSet (o enunciado permite) em
+# vez de Deployment porque banco guarda estado: o StatefulSet da ao pod um
+# nome fixo (banco-0) e um volume proprio que sobrevive a reinicios.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: banco
+  namespace: petclinic
+  labels:
+    app.kubernetes.io/name: banco
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: petclinic
+    app.kubernetes.io/version: "17.12"
+spec:
+  serviceName: banco-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: banco
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: banco
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: petclinic
+        app.kubernetes.io/version: "17.12"
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:17.12
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-c"
+            - "log_statement=$(PG_LOG_STATEMENT)"
+            - "-c"
+            - "log_min_duration_statement=$(PG_LOG_MIN_DURATION_MS)"
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: banco-credenciais, key: BANCO_ADMIN_USUARIO }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: banco-credenciais, key: BANCO_ADMIN_SENHA }
+            - name: APP_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: banco-credenciais, key: BANCO_APP_SENHA }
+            - name: MONITOR_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: banco-credenciais, key: BANCO_MONITORAMENTO_SENHA }
+            - name: APP_DB_NAME
+              valueFrom:
+                configMapKeyRef: { name: banco-config, key: APP_DB_NAME }
+            - name: APP_DB_USER
+              valueFrom:
+                configMapKeyRef: { name: banco-config, key: APP_DB_USER }
+            - name: MONITOR_DB_USER
+              valueFrom:
+                configMapKeyRef: { name: banco-config, key: MONITOR_DB_USER }
+            - name: PG_LOG_STATEMENT
+              valueFrom:
+                configMapKeyRef: { name: banco-config, key: PG_LOG_STATEMENT }
+            - name: PG_LOG_MIN_DURATION_MS
+              valueFrom:
+                configMapKeyRef: { name: banco-config, key: PG_LOG_MIN_DURATION_MS }
+          # Timeouts folgados: com a CPU disputada (ex.: as JVMs da aplicacao
+          # subindo), o pg_isready pode passar de 1 s, o padrao do Kubernetes,
+          # e o kubelet reiniciaria um banco que estava saudavel.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d postgres"]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: dados
+              mountPath: /var/lib/postgresql/data
+            - name: inicializacao
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: inicializacao
+          configMap:
+            name: banco-config
+            items:
+              - key: 01-criar-usuarios.sh
+                path: 01-criar-usuarios.sh
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
