@@ -1,3 +1,6 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+
 # Credenciais reais de cada ambiente (pilar "Ambiente")
 ambientes/*.env
 !ambientes/*.env.example

@@ -152,7 +152,10 @@ O banco roda como StatefulSet, que o enunciado permite. Na primeira subida, o sc
 kubectl apply -f k8s/app-configmap.yaml
 kubectl apply -f k8s/app-deployment.yaml
 kubectl apply -f k8s/app-service.yaml
-kubectl get pods -n petclinic
+
+# petclinic como namespace padrao: assim "kubectl get pods" ja mostra a aplicacao e o banco
+kubectl config set-context --current --namespace=petclinic
+kubectl get pods
 ```
 
 A ligação com o banco é feita por variáveis de ambiente no Deployment: `DB_HOST=banco-service`, `DB_PORT=5432` e `DB_NAME=petclinic` vêm do `app-config`, e a senha vem do Secret `banco-credenciais`.
@@ -201,14 +204,33 @@ Para investigar uma requisição: abra um trace na tabela, veja o span da consul
 
 ## Evidências
 
-| Evidência | Arquivo |
-|---|---|
-| `kubectl get pods` com 2 réplicas da aplicação e o banco | [01-kubectl-get-pods.png](docs/evidencias/01-kubectl-get-pods.png) |
-| Cadastro de um dono pela aplicação no navegador | [02-aplicacao.png](docs/evidencias/02-aplicacao.png) |
-| Dono salvo e lido de volta do banco (id 292) | [03-cadastro-no-banco.png](docs/evidencias/03-cadastro-no-banco.png) |
-| Grafana: métricas do Prometheus (réplicas, banco, requisições por réplica, CPU e memória) | [04-grafana-metricas.png](docs/evidencias/04-grafana-metricas.png) |
-| Grafana: logs do Loki (aplicação e banco) e traces do Tempo com o mapa de serviços | [05-grafana-logs-traces.png](docs/evidencias/05-grafana-logs-traces.png) |
-| Trace de um cadastro: HTTP, repositório e o `INSERT` no PostgreSQL | [06-grafana-trace-cadastro.png](docs/evidencias/06-grafana-trace-cadastro.png) |
+### `kubectl get pods`: 2 réplicas da aplicação e o banco rodando
+
+Saída do terminal com o cluster Minikube pronto, os pods da aplicação (`petclinic-*`, 2 réplicas) e do banco (`banco-0`), os Services e a URL da aplicação.
+
+![kubectl get pods](docs/evidencias/01-kubectl-get-pods.png)
+
+### Aplicação funcionando no navegador
+
+Cadastro de um dono pelo formulário do PetClinic, acessado pelo `app-service`:
+
+![Formulário de cadastro](docs/evidencias/02-aplicacao.png)
+
+Depois de salvar, a aplicação lê o registro de volta do banco (id 292):
+
+![Dono cadastrado](docs/evidencias/03-cadastro-no-banco.png)
+
+### Grafana: métricas do Prometheus, logs do Loki e traces do Tempo
+
+O painel **PetClinic: métricas, logs e traces** durante o teste de carga, com as três fontes na mesma tela. Em cima, as métricas: réplicas prontas, banco pronto, requisições por segundo, erros, latência, conexões no banco, requisições por réplica, CPU e memória por pod. No meio, os logs da aplicação (com `trace_id`) e do banco (com cada `insert into owners`). Embaixo, os traces e o mapa de serviços `user`, `petclinic` e `banco-service`.
+
+![Painel do Grafana](docs/evidencias/04-grafana-painel-completo.png)
+
+Trace de um cadastro aberto no Tempo: a requisição `POST /owners/new` passa pelo `OwnerRepository.save` e termina no `INSERT petclinic.owners` do PostgreSQL. O botão **Related logs** leva aos logs dessa requisição no Loki.
+
+![Trace de um cadastro](docs/evidencias/06-grafana-trace-cadastro.png)
+
+Mais capturas, em tamanho maior: [métricas](docs/evidencias/04-grafana-metricas.png) e [logs e traces](docs/evidencias/05-grafana-logs-traces.png).
 
 O mesmo cadastro conferido direto no banco:
 
