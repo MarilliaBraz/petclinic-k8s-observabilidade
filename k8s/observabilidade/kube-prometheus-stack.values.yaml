@@ -1,0 +1,128 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# kube-prometheus-stack: Prometheus (metricas), Grafana (paineis),
+# kube-state-metrics e node-exporter (estado do cluster, pods e recursos).
+fullnameOverride: kps
+
+# Componentes do plano de controle que o Minikube nao expoe para coleta.
+# Ficariam como alvos "down" sem trazer informacao util.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# Sem destino de notificacao neste trabalho; as regras de alerta continuam
+# visiveis na tela de alertas do Prometheus.
+alertmanager:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    # Volume proprio: as metricas sobrevivem a "minikube stop"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    # Recebe as metricas da aplicacao em OTLP, enviadas pelo OTel Collector
+    enableOTLPReceiver: true
+    otlp:
+      # Atributos do recurso que viram rotulos: permitem separar por pod
+      promoteResourceAttributes:
+        - service.name
+        - service.namespace
+        - service.instance.id
+        - k8s.pod.name
+        - k8s.namespace.name
+        - deployment.environment.name
+    # Recebe as metricas de service graph e span metrics geradas pelo Tempo
+    enableRemoteWriteReceiver: true
+    enableFeatures:
+      - exemplar-storage
+    # Coleta ServiceMonitors de qualquer namespace (ex.: postgres-exporter)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+grafana:
+  fullnameOverride: grafana
+  # Usuario e senha vem do Secret grafana-admin (criado por scripts/subir.sh)
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsTimezone: browser
+  sidecar:
+    datasources:
+      # O Alertmanager esta desligado acima; sem isso sobraria uma fonte quebrada
+      alertmanager:
+        enabled: false
+    dashboards:
+      # Carrega paineis de ConfigMaps com o rotulo grafana_dashboard em
+      # qualquer namespace (ex.: painel-petclinic.yaml)
+      searchNamespace: ALL
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  # Loki e Tempo ligados entre si e ao Prometheus: do trace para os logs,
+  # do log para o trace e do trace para o mapa de servicos.
+  # "$$" escapa o "$" no provisionamento do Grafana.
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.observabilidade.svc:3100
+      access: proxy
+      jsonData:
+        derivedFields:
+          - name: TraceID
+            datasourceUid: tempo
+            matcherRegex: "trace_id=(\\w+)"
+            url: "$${__value.raw}"
+            urlDisplayLabel: Abrir trace no Tempo
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.observabilidade.svc:3200
+      access: proxy
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-2m"
+          spanEndTimeShift: "2m"
+          customQuery: true
+          query: '{k8s_namespace_name="petclinic"} |= "$${__trace.traceId}"'
+        tracesToMetrics:
+          datasourceUid: prometheus
+        serviceMap:
+          datasourceUid: prometheus
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
+
+kube-state-metrics:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 64Mi }

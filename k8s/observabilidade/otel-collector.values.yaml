@@ -1,0 +1,94 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# OpenTelemetry Collector: ponto unico de entrada da telemetria.
+#   traces   (OTLP do agente Java)          -> Tempo
+#   metricas (OTLP do agente Java)          -> Prometheus (receptor OTLP)
+#   logs     (arquivos de log de cada pod)  -> Loki (endpoint OTLP)
+# Roda como DaemonSet (um por no) para conseguir ler os logs do no.
+# Trocar Tempo, Loki ou Prometheus por outro fornecedor muda so os
+# exporters abaixo; a aplicacao continua igual.
+fullnameOverride: otel-collector
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: 0.163.2
+
+presets:
+  # Le /var/log/pods de todos os containers do no
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
+  # Acrescenta namespace, pod, container e deployment em toda telemetria
+  kubernetesAttributes:
+    enabled: true
+
+service:
+  enabled: true
+
+# So OTLP fica aberto; Jaeger e Zipkin nao sao usados
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 384Mi
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    # Auto coleta do Collector: nao entra em nenhum pipeline
+    prometheus: null
+  processors:
+    # Descarta os traces das probes do Kubernetes (uma a cada poucos
+    # segundos por pod), que esconderiam as requisicoes reais no Tempo
+    filter/health-check:
+      error_mode: ignore
+      traces:
+        span:
+          - 'IsMatch(attributes["http.route"], "^/actuator/health")'
+    # Logs lidos de arquivo nao trazem service.name; usa o nome do container
+    transform/service-name:
+      log_statements:
+        - context: resource
+          statements:
+            - set(attributes["service.name"], attributes["k8s.container.name"]) where attributes["service.name"] == nil
+  exporters:
+    otlp_grpc/tempo:
+      endpoint: tempo.observabilidade.svc:4317
+      tls:
+        insecure: true
+    otlp_http/prometheus:
+      endpoint: http://kps-prometheus.observabilidade.svc:9090/api/v1/otlp
+      tls:
+        insecure: true
+    otlp_http/loki:
+      endpoint: http://loki.observabilidade.svc:3100/otlp
+      tls:
+        insecure: true
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, filter/health-check, batch]
+        exporters: [otlp_grpc/tempo]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_http/prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, transform/service-name, batch]
+        exporters: [otlp_http/loki]

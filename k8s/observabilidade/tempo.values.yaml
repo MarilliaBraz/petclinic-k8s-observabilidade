@@ -1,0 +1,39 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Tempo em modo monolitico. Recebe os traces em OTLP do OTel Collector.
+# O metrics generator transforma os traces em metricas (mapa de servicos e
+# taxa, erro e duracao por rota) e as envia ao Prometheus.
+fullnameOverride: tempo
+
+tempo:
+  reportingEnabled: false
+  retention: 48h
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://kps-prometheus.observabilidade.svc:9090/api/v1/write
+    storage:
+      path: /var/tempo/generator/wal
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 768Mi
+
+persistence:
+  enabled: true
+  size: 5Gi
