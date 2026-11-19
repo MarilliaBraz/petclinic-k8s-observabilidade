@@ -1,0 +1,19 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Dois namespaces: a aplicacao e o banco ficam em "petclinic", a stack de
+# observabilidade fica em "observabilidade". Assim uma parte nao interfere
+# na outra e as permissoes podem ser separadas.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: petclinic
+  labels:
+    app.kubernetes.io/part-of: petclinic
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observabilidade
+  labels:
+    app.kubernetes.io/part-of: observabilidade

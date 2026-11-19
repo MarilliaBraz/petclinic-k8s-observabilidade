@@ -1,0 +1,7 @@
+# Credenciais reais de cada ambiente (pilar "Ambiente")
+ambientes/*.env
+!ambientes/*.env.example
+
+# Arquivos locais
+.superpowers/
+*.log
