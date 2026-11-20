@@ -194,6 +194,10 @@ Trace de um cadastro aberto no Tempo: a requisição `POST /owners/new` passa pe
 
 ![Trace de um cadastro](docs/evidencias/06-grafana-trace-cadastro.png)
 
+Os mesmos logs da aplicação coletados pelo Promtail (stack PLG), com o rótulo `coletor="promtail"`. Cada linha traz o `trace_id`, que abre o trace no Tempo:
+
+![Logs coletados pelo Promtail](docs/evidencias/07-grafana-promtail.png)
+
 Mais capturas, em tamanho maior: [métricas](docs/evidencias/04-grafana-metricas.png) e [logs e traces](docs/evidencias/05-grafana-logs-traces.png).
 
 O mesmo cadastro conferido direto no banco:
