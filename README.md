@@ -2,6 +2,8 @@
 
 Atividade 4, Plataforma de Monitoramento e Observabilidade.
 
+Instalação do ambiente: [INSTALL.md](INSTALL.md).
+
 | Integrante | GitHub |
 |---|---|
 | Marillia Braz | [@MarilliaBraz](https://github.com/MarilliaBraz) |
@@ -55,6 +57,7 @@ Escolhemos o PetClinic porque Java com Spring Boot e PostgreSQL é a combinaçã
 ## Estrutura do repositório
 
 ```
+INSTALL.md                          instalação do Minikube e preparação do cluster
 app/Dockerfile                      imagem do PetClinic (build do código oficial)
 k8s/
   namespaces.yaml                   namespaces petclinic e observabilidade
@@ -77,57 +80,13 @@ scripts/
 docs/evidencias/                    capturas de tela da entrega
 ```
 
-## Pré-requisitos
+## Instalação
 
-- Linux com Docker
-- 4 CPUs e 8 GB de RAM livres para o Minikube
-- Cerca de 10 GB de disco para as imagens
+A instalação do kubectl, do Minikube e do Helm, a subida do cluster, a imagem da aplicação, os namespaces e as credenciais estão no **[INSTALL.md](INSTALL.md)**. Em resumo: Linux com Docker, 4 CPUs, 8 GB de RAM e cerca de 10 GB de disco.
 
 ## Passo a passo
 
-O script `scripts/subir.sh` executa as etapas 1 a 4 de uma vez. Abaixo estão os mesmos comandos, etapa por etapa, como pede o enunciado.
-
-### Etapa 1: instalação e preparação do ambiente
-
-```bash
-# kubectl, Minikube e Helm em ~/.local/bin (sem sudo)
-mkdir -p ~/.local/bin
-curl -Lo ~/.local/bin/kubectl "https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl"
-curl -Lo ~/.local/bin/minikube https://github.com/kubernetes/minikube/releases/download/v1.39.0/minikube-linux-amd64
-curl -L https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz | tar xz -C /tmp
-mv /tmp/linux-amd64/helm ~/.local/bin/
-chmod +x ~/.local/bin/kubectl ~/.local/bin/minikube
-
-# Cluster
-minikube start --driver=docker --kubernetes-version=v1.37.0 --cpus=4 --memory=8192 --disk-size=30g
-kubectl get nodes
-```
-
-### Imagem da aplicação
-
-```bash
-docker build -t petclinic:4.0.0-500158f app/
-minikube image load petclinic:4.0.0-500158f
-```
-
-### Credenciais
-
-As senhas não ficam nos arquivos YAML. Elas vêm de `ambientes/local.env`, que não vai para o Git:
-
-```bash
-cp ambientes/local.env.example ambientes/local.env   # e troque as senhas
-source ambientes/local.env
-kubectl apply -f k8s/namespaces.yaml
-kubectl -n petclinic create secret generic banco-credenciais \
-  --from-literal=BANCO_ADMIN_USUARIO="$BANCO_ADMIN_USUARIO" \
-  --from-literal=BANCO_ADMIN_SENHA="$BANCO_ADMIN_SENHA" \
-  --from-literal=BANCO_APP_SENHA="$BANCO_APP_SENHA" \
-  --from-literal=BANCO_MONITORAMENTO_SENHA="$BANCO_MONITORAMENTO_SENHA"
-kubectl -n observabilidade create secret generic grafana-admin \
-  --from-literal=admin-user="$GRAFANA_USUARIO" --from-literal=admin-password="$GRAFANA_SENHA"
-```
-
-As contas do banco são criadas uma única vez, na primeira subida do volume. Para trocar uma senha depois disso, apague o ambiente (`scripts/derrubar.sh --apagar`) e suba de novo, ou altere a conta no PostgreSQL com `ALTER ROLE` antes de atualizar o Secret.
+O script `scripts/subir.sh` executa todas as etapas de uma vez. Abaixo estão os mesmos comandos, etapa por etapa, como pede o enunciado. A etapa 1 (instalação e preparação do ambiente) está no [INSTALL.md](INSTALL.md).
 
 ### Etapa 2: banco de dados
 

@@ -4,6 +4,16 @@ Todas as mudanças relevantes deste repositório. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões seguem o
 [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.1] - 2026-11-20
+
+### Adicionado
+
+- `INSTALL.md` com a instalação do kubectl, do Minikube e do Helm, a subida do cluster, a imagem da aplicação, os namespaces e as credenciais.
+
+### Alterado
+
+- README passa a apontar para o `INSTALL.md` na parte de instalação.
+
 ## [1.0.0] - 2026-11-19
 
 ### Adicionado
