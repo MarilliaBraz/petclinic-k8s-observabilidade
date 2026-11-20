@@ -8,3 +8,7 @@ ambientes/*.env
 # Arquivos locais
 .superpowers/
 *.log
+
+# Material da apresentacao (slides e roteiro ficam fora do repositorio)
+*.pdf
+*.pptx
