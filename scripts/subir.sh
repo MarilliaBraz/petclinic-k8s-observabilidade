@@ -90,10 +90,12 @@ instalar_observabilidade() {
   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
   helm repo add grafana-community https://grafana-community.github.io/helm-charts >/dev/null
   helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null
+  helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
   helm repo update >/dev/null
   instalar_chart kube-prometheus-stack prometheus-community/kube-prometheus-stack \
     "$CHART_KUBE_PROMETHEUS_STACK" observabilidade "$OBS/kube-prometheus-stack.values.yaml"
   instalar_chart loki grafana-community/loki "$CHART_LOKI" observabilidade "$OBS/loki.values.yaml"
+  instalar_chart promtail grafana/promtail "$CHART_PROMTAIL" observabilidade "$OBS/promtail.values.yaml"
   instalar_chart tempo grafana-community/tempo "$CHART_TEMPO" observabilidade "$OBS/tempo.values.yaml"
   instalar_chart otel-collector open-telemetry/opentelemetry-collector \
     "$CHART_OTEL_COLLECTOR" observabilidade "$OBS/otel-collector.values.yaml"

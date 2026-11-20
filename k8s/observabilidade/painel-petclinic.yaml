@@ -437,16 +437,44 @@ data:
           "id": 13
         },
         {
+          "type": "logs",
+          "title": "Logs da aplicação coletados pelo Promtail (PLG)",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 24,
+            "h": 8
+          },
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending",
+            "enableLogDetails": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{coletor=\"promtail\", namespace=\"petclinic\", container=\"petclinic\"} != \"/actuator/health\" != \"Completed 200 OK\"",
+              "queryType": "range"
+            }
+          ],
+          "id": 14
+        },
+        {
           "type": "row",
           "title": "Traces (Tempo)",
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 24,
+            "y": 32,
             "w": 24,
             "h": 1
           },
-          "id": 14
+          "id": 15
         },
         {
           "type": "table",
@@ -457,7 +485,7 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 25,
+            "y": 33,
             "w": 14,
             "h": 10
           },
@@ -479,7 +507,7 @@ data:
               "query": "{resource.service.name=\"petclinic\" && span.http.route != \"\" && span.http.route !~ \"/actuator.*\"}"
             }
           ],
-          "id": 15
+          "id": 16
         },
         {
           "type": "nodeGraph",
@@ -490,7 +518,7 @@ data:
           },
           "gridPos": {
             "x": 14,
-            "y": 25,
+            "y": 33,
             "w": 10,
             "h": 10
           },
@@ -500,7 +528,7 @@ data:
               "queryType": "serviceMap"
             }
           ],
-          "id": 16
+          "id": 17
         }
       ]
     }

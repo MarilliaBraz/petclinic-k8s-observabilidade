@@ -1,0 +1,35 @@
+# Atividade 4 - Plataforma de Monitoramento e Observabilidade
+# Grupo: Marillia Braz, Lucas Mendes e Pedro Henrique Feitosa
+#
+# Promtail, o "P" da stack PLG (Promtail, Loki, Grafana). Roda como
+# DaemonSet, le os arquivos de log dos pods no no e envia ao Loki pela API
+# de push (/loki/api/v1/push).
+#
+# Ele roda em paralelo ao OTel Collector, que tambem envia os logs ao Loki.
+# Para separar as duas copias, toda linha enviada pelo Promtail leva o
+# rotulo coletor="promtail". Consultas:
+#   {coletor="promtail", namespace="petclinic"}   logs via Promtail
+#   {k8s_namespace_name="petclinic"}              logs via OTel Collector
+#
+# A Grafana encerrou o suporte do Promtail em 2026 (o substituto e o
+# Grafana Alloy). Ele foi mantido aqui porque o enunciado pede a stack PLG.
+
+config:
+  clients:
+    - url: http://loki.observabilidade.svc:3100/loki/api/v1/push
+      external_labels:
+        coletor: promtail
+  snippets:
+    # So o namespace da aplicacao: evita duplicar no Loki os logs de toda a
+    # stack de observabilidade, que ja chegam pelo Collector.
+    extraRelabelConfigs:
+      - source_labels: [namespace]
+        regex: petclinic
+        action: keep
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

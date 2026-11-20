@@ -32,8 +32,8 @@ Escolhemos o PetClinic porque Java com Spring Boot e PostgreSQL é a combinaçã
                                                               namespace observabilidade
    agente OTel (traces, métricas) --OTLP-->  OpenTelemetry Collector  <-- logs dos pods
                                               |        |         |
-                                            Tempo   Prometheus   Loki
-                                              \        |         /
+                                            Tempo   Prometheus   Loki  <--  Promtail <-- logs dos pods
+                                              \        |         /         (namespace petclinic)
                                                     Grafana
 ```
 
@@ -43,6 +43,7 @@ Escolhemos o PetClinic porque Java com Spring Boot e PostgreSQL é a combinaçã
 | Métricas da aplicação | agente Java do OpenTelemetry | OTLP para o Collector | Prometheus (receptor OTLP) |
 | Métricas do banco | postgres-exporter | coleta do Prometheus | Prometheus |
 | Logs | stdout de todos os pods | Collector lê os arquivos do nó | Loki (endpoint OTLP) |
+| Logs (PLG) | stdout dos pods do namespace `petclinic` | Promtail lê os arquivos do nó | Loki (API de push), com o rótulo `coletor="promtail"` |
 | Traces | agente Java do OpenTelemetry | OTLP para o Collector | Tempo |
 
 ### Por que essas ferramentas
@@ -51,8 +52,9 @@ Escolhemos o PetClinic porque Java com Spring Boot e PostgreSQL é a combinaçã
 - **OpenTelemetry Collector** é o ponto único de entrada da telemetria. A aplicação só conhece o protocolo OTLP, que também é aceito por Datadog, New Relic, Dynatrace e Elastic. Trocar de ferramenta muda só os exporters do Collector.
 - **Agente Java do OpenTelemetry** instrumenta a aplicação sem mudar o código. Cada requisição vira um trace com o span HTTP e os spans das consultas SQL.
 - **Loki e Tempo** guardam logs e traces indexando só rótulos (namespace, pod, serviço), o que deixa o custo bem abaixo de soluções que indexam o texto inteiro.
-- Os logs são lidos do stdout dos pods, como recomenda o [12-factor](https://12factor.net/pt_br/logs). Não usamos o Promtail porque ele foi descontinuado pela Grafana em favor do Collector e do Alloy.
-- Os charts de Loki e Tempo vêm do repositório `grafana-community`, porque o chart `grafana/tempo` foi marcado como deprecado.
+- Os logs são lidos do stdout dos pods, como recomenda o [12-factor](https://12factor.net/pt_br/logs).
+- **Promtail e Collector em paralelo.** O enunciado pede a stack PLG (Promtail, Loki, Grafana), então o Promtail está instalado e envia ao Loki os logs do namespace `petclinic`. O Collector continua enviando todos os logs por OTLP, que é o caminho recomendado hoje: a Grafana encerrou o suporte do Promtail em 2026 em favor do Collector e do Alloy. No Loki, as duas cópias se separam pelos rótulos: `{coletor="promtail", namespace="petclinic"}` traz as linhas do Promtail e `{k8s_namespace_name="petclinic"}` traz as do Collector.
+- Os charts de Loki e Tempo vêm do repositório `grafana-community`, porque o chart `grafana/tempo` foi marcado como deprecado. O do Promtail só existe no repositório `grafana`, também marcado como deprecado.
 
 ## Estrutura do repositório
 
@@ -126,6 +128,7 @@ source scripts/versoes.env
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana-community https://grafana-community.github.io/helm-charts
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 
 helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
@@ -133,6 +136,8 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   -f k8s/observabilidade/kube-prometheus-stack.values.yaml --wait --timeout 10m
 helm upgrade --install loki grafana-community/loki --version "$CHART_LOKI" \
   -n observabilidade -f k8s/observabilidade/loki.values.yaml --wait --timeout 10m
+helm upgrade --install promtail grafana/promtail --version "$CHART_PROMTAIL" \
+  -n observabilidade -f k8s/observabilidade/promtail.values.yaml --wait --timeout 10m
 helm upgrade --install tempo grafana-community/tempo --version "$CHART_TEMPO" \
   -n observabilidade -f k8s/observabilidade/tempo.values.yaml --wait --timeout 10m
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
@@ -156,7 +161,7 @@ No Grafana, abra o painel **PetClinic: métricas, logs e traces**. Ele mostra:
 
 - **Métricas (Prometheus):** réplicas prontas, banco pronto, requisições por segundo, erros, latência p95, conexões no banco, CPU e memória por pod.
 - **Balanceamento de carga:** o gráfico "Requisições por réplica" tem uma linha por pod. Linhas próximas mostram o Service dividindo as requisições (ver o item 2 de "Problemas encontrados").
-- **Logs (Loki):** logs da aplicação, com o `trace_id` de cada requisição, e logs do banco com cada `INSERT` feito pelos cadastros.
+- **Logs (Loki):** logs da aplicação, com o `trace_id` de cada requisição, e logs do banco com cada `INSERT` feito pelos cadastros. Logo abaixo, os mesmos logs da aplicação coletados pelo Promtail.
 - **Traces (Tempo):** as últimas requisições rastreadas e o mapa de serviços (petclinic para postgresql), montado a partir dos traces.
 
 Para investigar uma requisição: abra um trace na tabela, veja o span da consulta SQL e use **Logs for this span** para ir aos logs daquela requisição. No sentido contrário, o `trace_id` de uma linha de log abre o trace correspondente.

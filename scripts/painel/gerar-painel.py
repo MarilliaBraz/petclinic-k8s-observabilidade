@@ -41,9 +41,9 @@ def serie(titulo, alvos, x, y, w=8, unidade="short", descricao=""):
     }
 
 
-def logs(titulo, expr, x, y, w):
+def logs(titulo, expr, x, y, w, altura=10):
     return {
-        "type": "logs", "title": titulo, "datasource": LOKI, "gridPos": posicao(x, y, w, 10),
+        "type": "logs", "title": titulo, "datasource": LOKI, "gridPos": posicao(x, y, w, altura),
         "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending",
                     "enableLogDetails": True},
         "targets": [{"refId": "A", "expr": expr, "queryType": "range"}],
@@ -88,10 +88,15 @@ paineis = [
     logs("Logs do banco de dados (INSERT, UPDATE, DELETE)",
          '{k8s_namespace_name="petclinic", k8s_container_name="postgres"}'
          ' |~ "(?i)insert into|update |delete from|error|fatal"', 14, 14, 10),
-    linha("Traces (Tempo)", 24),
+    # Mesmos logs da aplicacao, coletados pelo Promtail (stack PLG). Os
+    # rotulos sao os do Promtail (namespace, container), nao os do Collector.
+    logs("Logs da aplicação coletados pelo Promtail (PLG)",
+         '{coletor="promtail", namespace="petclinic", container="petclinic"}'
+         ' != "/actuator/health" != "Completed 200 OK"', 0, 24, 24, altura=8),
+    linha("Traces (Tempo)", 32),
     {
         "type": "table", "title": "Últimas requisições rastreadas (clique no trace)",
-        "datasource": TEMPO, "gridPos": posicao(0, 25, 14, 10),
+        "datasource": TEMPO, "gridPos": posicao(0, 33, 14, 10),
         # A coluna "nested" (spans internos) so polui a tabela
         "transformations": [{"id": "organize", "options": {"excludeByName": {"nested": True}}}],
         "targets": [{"refId": "A", "queryType": "traceql", "limit": 20,
@@ -99,7 +104,7 @@ paineis = [
     },
     {
         "type": "nodeGraph", "title": "Mapa de serviços (gerado a partir dos traces)",
-        "datasource": TEMPO, "gridPos": posicao(14, 25, 10, 10),
+        "datasource": TEMPO, "gridPos": posicao(14, 33, 10, 10),
         "targets": [{"refId": "A", "queryType": "serviceMap"}],
     },
 ]

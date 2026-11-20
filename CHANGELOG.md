@@ -4,6 +4,13 @@ Todas as mudanças relevantes deste repositório. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões seguem o
 [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-11-20
+
+### Adicionado
+
+- Promtail 3.5.1 (chart `grafana/promtail` 6.17.1) enviando ao Loki os logs do namespace `petclinic`, com o rótulo `coletor="promtail"`, em paralelo ao OpenTelemetry Collector.
+- Painel "Logs da aplicação coletados pelo Promtail (PLG)" no Grafana.
+
 ## [1.0.1] - 2026-11-20
 
 ### Adicionado
